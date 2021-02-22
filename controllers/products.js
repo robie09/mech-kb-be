@@ -1,6 +1,6 @@
-const { Product } = require("../db/models");
+const { Product, Shop } = require("../db/models");
 
-const fetchProduct = async (productId, next) => {
+exports.fetchProduct = async (productId, next) => {
   try {
     const productFound = await Product.findByPk(productId);
     if (productFound) return productFound;
@@ -13,17 +13,17 @@ const fetchProduct = async (productId, next) => {
 exports.productList = async (req, res, next) => {
   console.log(req.body);
   try {
-    const products = await Product.findAll({ attributes: req.body });
-    res.status(200).json(products);
-  } catch (error) {
-    next(error);
-  }
-};
+    const products = await Product.findAll({
+      attributes: req.body,
+      attributes: { exclude: ["updatedAt", "createdAt"] },
 
-exports.productCreate = async (req, res, next) => {
-  try {
-    const newProduct = await Product.create(req.body);
-    res.status(201).json(newProduct);
+      include: {
+        model: Shop,
+        as: "shops",
+        attributes: ["id"],
+      },
+    });
+    res.status(200).json(products);
   } catch (error) {
     next(error);
   }
@@ -34,11 +34,30 @@ exports.productDetail = async (req, res, next) => {
 };
 
 exports.productUpdate = async (req, res, next) => {
-  await req.product.update(req.body);
-  res.status(200).json(req.product);
+  const foundShop = await Shop.findByPk(req.product.shopId);
+
+  if (req.user.id === foundShop.userId) {
+    if (req.file) {
+      req.body.image = `http://${req.get("host")}/media/${req.file.filename}`;
+    }
+    await req.product.update(req.body);
+    res.status(200).json(req.product);
+  } else {
+    const err = new Error("Unauthorized !");
+    err.status = 401;
+    next(err);
+  }
 };
 
 exports.productDelete = async (req, res, next) => {
-  await req.product.destroy();
-  res.status(204).end();
+  const foundShop = await Shop.findByPk(req.product.shopId);
+
+  if (req.user.id === foundShop.userId) {
+    await req.product.destroy();
+    res.status(204).end();
+  } else {
+    const err = new Error("Unauthorized !");
+    err.status = 401;
+    next(err);
+  }
 };
